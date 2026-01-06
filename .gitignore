@@ -1,0 +1,21 @@
+# Python & Poetry
+__pycache__/
+*.py[cod]
+.venv/
+poetry.lock
+.env
+
+# Data Files (CRITICAL: 100MB 넘는 파일 차단)
+*.duckdb
+*.db
+*.csv
+*.parquet
+data/raw/
+data/processed/
+
+# OS Specific
+.DS_Store
+
+# Logs & Viz
+*.log
+simulation_result.png

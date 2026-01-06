@@ -1,0 +1,400 @@
+"""
+EffectiveVelocityCalculator: Perry Husband's Effective Velocity Theory
+
+Perry Husband's Effective Velocity (EV) 이론:
+- 타자의 눈에서 가까운 공(몸쪽)은 실제보다 빠르게 보임
+- 타자의 눈에서 먼 공(바깥쪽)은 실제보다 느리게 보임
+- 높은 공은 눈에 가까워 빠르게 보이고, 낮은 공은 느리게 보임
+
+Reference: Perry Husband, "The Effective Velocity Concept"
+"""
+
+from typing import Tuple, Optional
+import numpy as np
+
+
+class EffectiveVelocityCalculator:
+    """
+    Perry Husband의 Effective Velocity 이론 구현
+
+    타자의 체감 속도를 계산하여 투구 시퀀싱 최적화
+
+    Core Principle:
+        - 기준점: 홈플레이트 정중앙, 벨트 높이 (EV = 실제 구속)
+        - 몸쪽 공: 체감 속도 증가
+        - 바깥쪽 공: 체감 속도 감소
+        - 높은 공: 체감 속도 증가
+        - 낮은 공: 체감 속도 감소
+    """
+
+    # Perry Husband의 연구 기반 상수
+    # 좌우 6인치당 2.5mph -> 1인치당 약 0.417mph
+    LATERAL_ADJUSTMENT = 0.417  # mph per inch
+
+    # 상하 6인치당 1.0mph -> 1인치당 약 0.167mph
+    VERTICAL_ADJUSTMENT = 0.167  # mph per inch
+
+    # 기준점
+    BELT_HEIGHT = 2.5  # ft (약 30 inches, MLB average)
+    PLATE_CENTER = 0.0  # ft (홈플레이트 중앙)
+
+    def __init__(
+        self,
+        lateral_factor: float = 1.0,
+        vertical_factor: float = 1.0
+    ):
+        """
+        EffectiveVelocityCalculator 초기화
+
+        Args:
+            lateral_factor: 좌우 보정 계수 (1.0 = 표준)
+            vertical_factor: 상하 보정 계수 (1.0 = 표준)
+        """
+        self.lateral_factor = lateral_factor
+        self.vertical_factor = vertical_factor
+        self.last_ev: Optional[float] = None
+
+        print(f"✅ EffectiveVelocityCalculator 초기화")
+        print(f"   Lateral Factor: {lateral_factor:.2f}")
+        print(f"   Vertical Factor: {vertical_factor:.2f}")
+
+    def calculate_ev(
+        self,
+        release_speed: float,
+        plate_x: float,
+        plate_z: float,
+        batter_stand: str
+    ) -> float:
+        """
+        Effective Velocity 계산
+
+        Args:
+            release_speed: 실제 구속 (mph)
+            plate_x: 홈플레이트 좌우 위치 (ft, 포수 시점)
+                     음수(-): 좌타자석 방향
+                     양수(+): 우타자석 방향
+            plate_z: 홈플레이트 높이 (ft)
+            batter_stand: 타자 타석 ('L' = 좌타자, 'R' = 우타자)
+
+        Returns:
+            effective_velocity: 체감 속도 (mph)
+
+        Formula:
+            EV = V0 + Delta_V_lateral + Delta_V_vertical
+
+            where:
+            - Delta_V_lateral: 좌우 보정 (몸쪽 = 가산, 바깥쪽 = 감산)
+            - Delta_V_vertical: 상하 보정 (높음 = 가산, 낮음 = 감산)
+        """
+        if batter_stand not in ['L', 'R']:
+            raise ValueError(f"batter_stand must be 'L' or 'R', got: {batter_stand}")
+
+        # 1. Lateral Adjustment (좌우 보정)
+        lateral_ev_delta = self._calculate_lateral_adjustment(plate_x, batter_stand)
+
+        # 2. Vertical Adjustment (상하 보정)
+        vertical_ev_delta = self._calculate_vertical_adjustment(plate_z)
+
+        # 3. Total Effective Velocity
+        effective_velocity = (
+            release_speed +
+            lateral_ev_delta * self.lateral_factor +
+            vertical_ev_delta * self.vertical_factor
+        )
+
+        return effective_velocity
+
+    def _calculate_lateral_adjustment(
+        self,
+        plate_x: float,
+        batter_stand: str
+    ) -> float:
+        """
+        좌우 위치 기반 체감 속도 보정
+
+        Args:
+            plate_x: 홈플레이트 좌우 위치 (ft)
+            batter_stand: 타자 타석 ('L' or 'R')
+
+        Returns:
+            delta_ev: 체감 속도 변화량 (mph)
+
+        Logic:
+            - 좌타자 (L): plate_x < 0 = 몸쪽 (Inner) = 빠르게 (+)
+                          plate_x > 0 = 바깥쪽 (Outer) = 느리게 (-)
+            - 우타자 (R): plate_x > 0 = 몸쪽 (Inner) = 빠르게 (+)
+                          plate_x < 0 = 바깥쪽 (Outer) = 느리게 (-)
+        """
+        # 플레이트 중앙으로부터의 거리 (inches)
+        distance_from_center_ft = plate_x - self.PLATE_CENTER
+        distance_from_center_inch = distance_from_center_ft * 12  # ft -> inches
+
+        # 타자별 몸쪽/바깥쪽 판별
+        if batter_stand == 'L':
+            # 좌타자: 음수 = 몸쪽, 양수 = 바깥쪽
+            ev_delta = -distance_from_center_inch * self.LATERAL_ADJUSTMENT
+        else:  # 'R'
+            # 우타자: 양수 = 몸쪽, 음수 = 바깥쪽
+            ev_delta = distance_from_center_inch * self.LATERAL_ADJUSTMENT
+
+        return ev_delta
+
+    def _calculate_vertical_adjustment(
+        self,
+        plate_z: float
+    ) -> float:
+        """
+        상하 높이 기반 체감 속도 보정
+
+        Args:
+            plate_z: 홈플레이트 높이 (ft)
+
+        Returns:
+            delta_ev: 체감 속도 변화량 (mph)
+
+        Logic:
+            - 벨트 높이 (2.5 ft) 기준
+            - 높은 공 (plate_z > 2.5 ft) = 빠르게 (+)
+            - 낮은 공 (plate_z < 2.5 ft) = 느리게 (-)
+        """
+        # 벨트 높이로부터의 차이 (inches)
+        height_diff_ft = plate_z - self.BELT_HEIGHT
+        height_diff_inch = height_diff_ft * 12  # ft -> inches
+
+        # 높을수록 빠르게 보임
+        ev_delta = height_diff_inch * self.VERTICAL_ADJUSTMENT
+
+        return ev_delta
+
+    def get_velocity_delta(
+        self,
+        current_ev: Optional[float] = None,
+        release_speed: Optional[float] = None,
+        plate_x: Optional[float] = None,
+        plate_z: Optional[float] = None,
+        batter_stand: Optional[str] = None
+    ) -> Optional[float]:
+        """
+        이전 투구와 현재 투구의 EV 차이 계산
+
+        Args:
+            current_ev: 현재 투구의 Effective Velocity (mph)
+                        None인 경우 나머지 파라미터로 계산
+            release_speed: 실제 구속 (mph)
+            plate_x: 좌우 위치 (ft)
+            plate_z: 높이 (ft)
+            batter_stand: 타자 타석 ('L' or 'R')
+
+        Returns:
+            velocity_delta: |EV_current - EV_previous| (mph)
+                            첫 투구인 경우 None
+        """
+        # current_ev가 없으면 계산
+        if current_ev is None:
+            if None in [release_speed, plate_x, plate_z, batter_stand]:
+                raise ValueError(
+                    "Either current_ev or all of "
+                    "(release_speed, plate_x, plate_z, batter_stand) must be provided"
+                )
+            current_ev = self.calculate_ev(release_speed, plate_x, plate_z, batter_stand)
+
+        # 첫 투구인 경우
+        if self.last_ev is None:
+            self.last_ev = current_ev
+            return None
+
+        # Delta 계산
+        velocity_delta = abs(current_ev - self.last_ev)
+
+        # 현재 EV를 last_ev로 업데이트
+        self.last_ev = current_ev
+
+        return velocity_delta
+
+    def get_location_descriptor(
+        self,
+        plate_x: float,
+        plate_z: float,
+        batter_stand: str
+    ) -> Tuple[str, str]:
+        """
+        투구 위치 설명 (디버깅/시각화용)
+
+        Args:
+            plate_x: 홈플레이트 좌우 위치 (ft)
+            plate_z: 홈플레이트 높이 (ft)
+            batter_stand: 타자 타석 ('L' or 'R')
+
+        Returns:
+            tuple: (lateral_desc, vertical_desc)
+        """
+        # Lateral (좌우)
+        if batter_stand == 'L':
+            if plate_x < -0.2:
+                lateral_desc = 'Inner'
+            elif plate_x > 0.2:
+                lateral_desc = 'Outer'
+            else:
+                lateral_desc = 'Middle'
+        else:  # 'R'
+            if plate_x > 0.2:
+                lateral_desc = 'Inner'
+            elif plate_x < -0.2:
+                lateral_desc = 'Outer'
+            else:
+                lateral_desc = 'Middle'
+
+        # Vertical (상하)
+        if plate_z > 2.8:
+            vertical_desc = 'High'
+        elif plate_z < 2.2:
+            vertical_desc = 'Low'
+        else:
+            vertical_desc = 'Middle'
+
+        return lateral_desc, vertical_desc
+
+    def analyze_pitch_sequence(
+        self,
+        pitch_sequence: list
+    ) -> dict:
+        """
+        투구 시퀀스 분석
+
+        Args:
+            pitch_sequence: List of pitch dicts
+
+        Returns:
+            analysis: 시퀀스 분석 결과
+        """
+        evs = []
+        deltas = []
+
+        # Reset last_ev
+        self.last_ev = None
+
+        for pitch in pitch_sequence:
+            ev = self.calculate_ev(
+                release_speed=pitch['release_speed'],
+                plate_x=pitch['plate_x'],
+                plate_z=pitch['plate_z'],
+                batter_stand=pitch['batter_stand']
+            )
+            evs.append(ev)
+
+            delta = self.get_velocity_delta(current_ev=ev)
+            if delta is not None:
+                deltas.append(delta)
+
+        analysis = {
+            'evs': evs,
+            'deltas': deltas,
+            'avg_delta': np.mean(deltas) if deltas else 0.0,
+            'max_delta': np.max(deltas) if deltas else 0.0,
+            'min_delta': np.min(deltas) if deltas else 0.0,
+            'total_pitches': len(pitch_sequence)
+        }
+
+        return analysis
+
+
+def main():
+    """사용 예시"""
+    print("=" * 80)
+    print("🎯 EffectiveVelocityCalculator 예제")
+    print("=" * 80 + "\n")
+
+    # 1. Calculator 초기화
+    calculator = EffectiveVelocityCalculator()
+    print()
+
+    # 2. 단일 투구 분석
+    print("📊 단일 투구 분석")
+    print("-" * 80)
+
+    # Example: 좌타자 상대 몸쪽 높은 공 (Inner High)
+    pitch1_speed = 95.0
+    pitch1_x = -0.5  # ft (좌타자 몸쪽)
+    pitch1_z = 2.8  # ft (높은 공)
+    batter = 'L'
+
+    ev1 = calculator.calculate_ev(pitch1_speed, pitch1_x, pitch1_z, batter)
+    loc1 = calculator.get_location_descriptor(pitch1_x, pitch1_z, batter)
+
+    print(f"Pitch 1: {pitch1_speed} mph @ ({pitch1_x:.2f}, {pitch1_z:.2f}) vs {batter}H")
+    print(f"  Location: {loc1[0]} / {loc1[1]}")
+    print(f"  Effective Velocity: {ev1:.2f} mph")
+    print(f"  Impact: {ev1 - pitch1_speed:+.2f} mph\n")
+
+    # Example: 좌타자 상대 바깥쪽 낮은 공 (Outer Low)
+    pitch2_speed = 87.0
+    pitch2_x = 0.5  # ft (좌타자 바깥쪽)
+    pitch2_z = 2.0  # ft (낮은 공)
+
+    ev2 = calculator.calculate_ev(pitch2_speed, pitch2_x, pitch2_z, batter)
+    loc2 = calculator.get_location_descriptor(pitch2_x, pitch2_z, batter)
+    delta = calculator.get_velocity_delta(current_ev=ev2)
+
+    print(f"Pitch 2: {pitch2_speed} mph @ ({pitch2_x:.2f}, {pitch2_z:.2f}) vs {batter}H")
+    print(f"  Location: {loc2[0]} / {loc2[1]}")
+    print(f"  Effective Velocity: {ev2:.2f} mph")
+    print(f"  Impact: {ev2 - pitch2_speed:+.2f} mph")
+    if delta is not None:
+        print(f"  Delta from Pitch 1: {delta:.2f} mph\n")
+
+    # 3. 투구 시퀀스 분석
+    print("=" * 80)
+    print("🔄 투구 시퀀스 분석")
+    print("=" * 80 + "\n")
+
+    sequence = [
+        {'release_speed': 95.0, 'plate_x': -0.5, 'plate_z': 2.8, 'batter_stand': 'L', 'pitch_type': 'FF'},
+        {'release_speed': 92.0, 'plate_x': 0.0, 'plate_z': 2.5, 'batter_stand': 'L', 'pitch_type': 'SI'},
+        {'release_speed': 87.0, 'plate_x': 0.5, 'plate_z': 2.0, 'batter_stand': 'L', 'pitch_type': 'CH'},
+        {'release_speed': 84.0, 'plate_x': 0.3, 'plate_z': 1.8, 'batter_stand': 'L', 'pitch_type': 'SL'}
+    ]
+
+    analysis = calculator.analyze_pitch_sequence(sequence)
+
+    print("Pitch Sequence Results:")
+    for i, (pitch, ev) in enumerate(zip(sequence, analysis['evs']), 1):
+        loc = calculator.get_location_descriptor(
+            pitch['plate_x'], pitch['plate_z'], pitch['batter_stand']
+        )
+        print(f"  {i}. {pitch['pitch_type']}: "
+              f"{pitch['release_speed']:.1f} mph -> {ev:.2f} mph EV "
+              f"({loc[0]}/{loc[1]})")
+
+    print(f"\nSequence Statistics:")
+    print(f"  Average EV Delta: {analysis['avg_delta']:.2f} mph")
+    print(f"  Maximum EV Delta: {analysis['max_delta']:.2f} mph")
+    print(f"  Minimum EV Delta: {analysis['min_delta']:.2f} mph")
+
+    # 4. 좌타자 vs 우타자 비교
+    print("\n" + "=" * 80)
+    print("🔄 좌타자 vs 우타자 비교")
+    print("=" * 80 + "\n")
+
+    pitch_speed = 95.0
+    pitch_x = -0.5
+    pitch_z = 2.5
+
+    calculator_reset = EffectiveVelocityCalculator()
+    ev_left = calculator_reset.calculate_ev(pitch_speed, pitch_x, pitch_z, 'L')
+    loc_left = calculator_reset.get_location_descriptor(pitch_x, pitch_z, 'L')
+
+    ev_right = calculator_reset.calculate_ev(pitch_speed, pitch_x, pitch_z, 'R')
+    loc_right = calculator_reset.get_location_descriptor(pitch_x, pitch_z, 'R')
+
+    print(f"Same Pitch @ ({pitch_x:.2f}, {pitch_z:.2f}), {pitch_speed} mph")
+    print(f"  vs LHH: {ev_left:.2f} mph ({loc_left[0]}) - {ev_left - pitch_speed:+.2f} mph")
+    print(f"  vs RHH: {ev_right:.2f} mph ({loc_right[0]}) - {ev_right - pitch_speed:+.2f} mph")
+    print(f"  Difference: {abs(ev_left - ev_right):.2f} mph")
+
+    print("\n" + "=" * 80)
+    print("✅ 완료")
+    print("=" * 80)
+
+
+if __name__ == "__main__":
+    main()
