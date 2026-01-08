@@ -1,0 +1,368 @@
+# ==============================================================================
+# Simulation Configuration: Bio-Mechanical Constraints & Coupled Physics
+# ==============================================================================
+#
+# This configuration defines biomechanical constraints and physics coupling
+# relationships for the genetic algorithm optimization of pitch specifications.
+#
+# Philosophy:
+#   - Soft penalties instead of hard rejections
+#   - Physics-based coupling between variables
+#   - Research-backed trade-off coefficients
+#
+# References:
+#   - Driveline Baseball Research (velocity-efficiency trade-offs)
+#   - Rapsodo/TrackMan Studies (spin axis effects)
+#   - MLB Pitch Design Literature
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Biomechanical Constraints (Delta Limits)
+# ------------------------------------------------------------------------------
+# These define the maximum allowable change from a pitcher's current repertoire
+# to a candidate pitch. Based on pitcher physiology and safety considerations.
+
+BIOMECHANICS:
+  # Velocity constraints (mph)
+  max_delta_velocity: 2.5 # Maximum velocity change from base pitch
+  velocity_min: 70.0 # Absolute minimum velocity (safety)
+  velocity_max: 105.0 # Absolute maximum velocity (human limit)
+
+  # Spin rate constraints (rpm)
+  max_delta_spin: 400.0 # Maximum spin rate change from base pitch
+  spin_min: 0.0 # Minimum spin (knuckleball territory)
+  spin_max: 4000.0 # Maximum spin (elite breaking ball)
+
+  # Spin axis constraints (degrees)
+  max_delta_axis: 30.0 # Maximum axis tilt/direction change
+  axis_tilt_min: 0.0 # Pure transverse spin (12:00)
+  axis_tilt_max: 90.0 # Pure gyro spin (3:00)
+  axis_direction_min: -180.0 # Full range of spin direction
+  axis_direction_max: 180.0
+
+  # Spin efficiency constraints (0.0 - 1.0)
+  max_delta_efficiency: 0.15 # Maximum efficiency change
+  efficiency_min: 0.0 # Theoretical minimum (pure gyro)
+  efficiency_max: 1.0 # Theoretical maximum (perfect magnus)
+
+  # Seam-Shifted Wake (SSW) constraints
+  max_delta_ssw_angle: 20.0 # Maximum SSW angle change (degrees)
+  max_delta_ssw_efficiency: 0.1 # Maximum SSW efficiency change
+  ssw_angle_min: -45.0 # SSW angle range
+  ssw_angle_max: 45.0
+  ssw_efficiency_min: 0.0 # SSW efficiency range
+  ssw_efficiency_max: 1.0
+
+# ------------------------------------------------------------------------------
+# Coupled Physics (Research-Backed Trade-offs)
+# ------------------------------------------------------------------------------
+# These define natural relationships between variables based on physics and
+# biomechanics research. Violating these relationships incurs soft penalties.
+
+COUPLED_PHYSICS:
+  # Velocity-Efficiency Coupling
+  # Research: Higher velocity typically reduces spin efficiency due to
+  # reduced effective "grip time" on the ball (Driveline Research, 2020)
+  velocity_efficiency_decay: 0.015 # Efficiency decreases by this fraction per mph increase
+  velocity_efficiency_coupling_strength: 1.0 # Weight for this coupling
+
+  # Axis-Efficiency Coupling (Sweeper Physics)
+  # Research: Tilting spin axis away from pure backspin/topspin reduces
+  # effective Magnus force due to increased gyro component
+  axis_efficiency_coupling: 0.05 # Efficiency penalty per degree of axis deviation
+  axis_efficiency_coupling_strength: 0.8 # Weight for this coupling
+
+  # Velocity-Spin Coupling
+  # Research: Higher velocity allows for higher spin rates due to greater
+  # force applied during release, but there's an upper limit
+  velocity_spin_ratio_min: 10.0 # Minimum spin per mph (rpm/mph)
+  velocity_spin_ratio_max: 40.0 # Maximum spin per mph (rpm/mph)
+  velocity_spin_coupling_strength: 1.2 # Weight for this coupling
+
+  # Efficiency-SSW Trade-off
+  # Research: Strong SSW effects typically occur with lower spin efficiency
+  # as seam orientation dominates over pure Magnus
+  efficiency_ssw_anticorrelation: 0.6 # High efficiency penalizes high SSW
+  efficiency_ssw_coupling_strength: 0.9 # Weight for this coupling
+
+  # Spin-Axis Constraints
+  # Research: Different pitch types have characteristic spin axis ranges
+  # High-spin pitches (>2500 rpm) tend toward more aligned axes
+  high_spin_axis_stability: 2500.0 # Threshold for high-spin stability
+  high_spin_axis_tolerance: 15.0 # Reduced axis deviation allowed for high-spin
+
+# ------------------------------------------------------------------------------
+# Penalty Weights
+# ------------------------------------------------------------------------------
+# These determine how severely different constraint violations affect the
+# final penalty score (which is added to xRV in genetic algorithm fitness)
+
+PENALTY_WEIGHTS:
+  # Hard limit violations (absolute physical/biomechanical boundaries)
+  hard_limit_weight: 100.0 # Severe penalty for exceeding absolute limits
+
+  # Soft coupling violations (physics-based relationships)
+  soft_coupling_weight: 10.0 # Moderate penalty for violating natural relationships
+
+  # Delta violations (change from base specification)
+  delta_violation_weight: 25.0 # Penalty for exceeding delta limits
+
+  # Composite violations (multiple constraints violated simultaneously)
+  composite_violation_multiplier: 1.5 # Multiplier when multiple violations occur
+
+  # Small violation threshold (below this, no penalty)
+  epsilon: 1e-6 # Numerical tolerance for floating point comparisons
+
+# ------------------------------------------------------------------------------
+# Penalty Scaling Functions
+# ------------------------------------------------------------------------------
+# Define how penalty grows with violation magnitude
+
+PENALTY_SCALING:
+  # Scaling function type: "linear", "quadratic", "exponential"
+  hard_limit_scaling: "quadratic" # Quadratic: penalty = weight * violation^2
+  soft_coupling_scaling: "linear" # Linear: penalty = weight * violation
+  delta_scaling: "quadratic" # Quadratic for delta violations
+
+  # Exponential scaling parameters (if using exponential)
+  exponential_base: 2.0 # Base for exponential scaling
+  exponential_scale: 0.1 # Scale factor for exponential
+
+# ------------------------------------------------------------------------------
+# Pitch Type Specific Constraints (Optional)
+# ------------------------------------------------------------------------------
+# These can be used to apply different constraints based on pitch classification
+
+PITCH_TYPE_CONSTRAINTS:
+  fastball:
+    min_velocity: 88.0
+    max_velocity: 105.0
+    min_spin: 1800.0
+    max_spin: 2800.0
+    preferred_efficiency_min: 0.85
+    preferred_efficiency_max: 1.0
+
+  breaking_ball:
+    min_velocity: 70.0
+    max_velocity: 88.0
+    min_spin: 2000.0
+    max_spin: 4000.0
+    preferred_efficiency_min: 0.7
+    preferred_efficiency_max: 0.95
+
+  changeup:
+    min_velocity: 75.0
+    max_velocity: 88.0
+    min_spin: 1200.0
+    max_spin: 2200.0
+    preferred_efficiency_min: 0.6
+    preferred_efficiency_max: 0.85
+
+  sweeper:
+    min_velocity: 78.0
+    max_velocity: 88.0
+    min_spin: 2200.0
+    max_spin: 3200.0
+    preferred_efficiency_min: 0.5
+    preferred_efficiency_max: 0.75
+    axis_tilt_min: 30.0 # Sweepers need side spin
+    axis_tilt_max: 60.0
+
+# ------------------------------------------------------------------------------
+# Research-Backed Correlations
+# ------------------------------------------------------------------------------
+# Expected correlation coefficients between variables (for validation)
+
+EXPECTED_CORRELATIONS:
+  velocity_spin: 0.3 # Weak positive correlation
+  velocity_efficiency: -0.2 # Weak negative correlation
+  spin_efficiency: 0.4 # Moderate positive correlation
+  axis_efficiency: -0.5 # Moderate negative correlation (more tilt = less efficiency)
+  efficiency_ssw: -0.4 # Moderate negative correlation
+
+# ------------------------------------------------------------------------------
+# Optimization Guidance
+# ------------------------------------------------------------------------------
+# Parameters to guide the genetic algorithm search
+
+OPTIMIZATION:
+  # Penalty threshold for considering a candidate "valid"
+  acceptable_penalty_threshold: 5.0
+
+  # Penalty threshold for rejecting candidates outright
+  rejection_penalty_threshold: 50.0
+
+  # Whether to use adaptive penalty weights (increase over generations)
+  use_adaptive_penalties: true
+  adaptive_penalty_growth_rate: 1.05 # Multiply weights by this each generation
+  adaptive_penalty_max_multiplier: 3.0 # Maximum multiplier for adaptive penalties
+
+  # Whether to normalize penalties by base pitch characteristics
+  normalize_by_base: true
+
+  # Whether to log detailed penalty breakdowns
+  log_penalty_details: false
+
+# ------------------------------------------------------------------------------
+# Optimization Engine Configuration
+# ------------------------------------------------------------------------------
+# Parameters for differential evolution genetic algorithm optimization.
+# Uses scipy.optimize.differential_evolution with vectorized mode for speed.
+
+OPTIMIZATION_ENGINE:
+  # Algorithm selection
+  algorithm: "differential_evolution" # scipy.optimize.differential_evolution
+
+  # Differential evolution strategy
+  # Options: 'best1bin', 'best1exp', 'rand1exp', 'randtobest1exp',
+  #          'currenttobest1exp', 'best2exp', 'rand2exp', 'randtobest1bin',
+  #          'currenttobest1bin', 'best2bin', 'rand2bin', 'rand1bin'
+  strategy: "best1bin"
+
+  # Population and generation parameters
+  population_size: 50 # Population size multiplier (actual size = multiplier * dimensions)
+  max_generations: 30 # Maximum number of generations
+
+  # Mutation and recombination
+  mutation: [0.5, 1.0] # Mutation rate range [min, max] (dithering)
+  recombination: 0.7 # Crossover probability [0, 1]
+
+  # Convergence criteria
+  tolerance: 0.01 # Relative tolerance for convergence
+  atol: 0.0 # Absolute tolerance for convergence
+
+  # Parallelization
+  workers: 1 # Number of parallel workers (-1 = all cores, 1 = single process)
+  # Note: With vectorized=True, single process is often faster due to
+  # NumPy's optimized matrix operations vs multiprocessing overhead
+
+  # Vectorization (CRITICAL FOR PERFORMANCE)
+  vectorized: true # Enable vectorized objective function (batch mode)
+  updating: "deferred" # Update strategy: 'immediate' or 'deferred'
+
+  # Random seed for reproducibility
+  seed: 42
+
+  # Polishing (local optimization after DE)
+  polish: false # Whether to polish best solution with L-BFGS-B
+
+  # Display and logging
+  disp: false # Display convergence messages
+  callback_frequency: 5 # Log every N generations (0 = no logging)
+
+# ------------------------------------------------------------------------------
+# Cost Function Configuration
+# ------------------------------------------------------------------------------
+# Defines how to combine xRV prediction and constraint penalties into
+# a single cost function for optimization (minimize cost = maximize value).
+
+COST_FUNCTION:
+  # Component weights
+  weights:
+    xrv: 1.0 # Weight for xRV component (higher xRV = lower cost)
+    penalty: 1.0 # Weight for constraint penalty component
+
+  # Early exit thresholds (performance optimization)
+  thresholds:
+    # If constraint penalty exceeds this, skip expensive physics simulation
+    # and xRV prediction (candidate is invalid anyway)
+    early_exit_penalty: 100.0
+
+    # Cost value to return for early-exited candidates
+    # Should be high enough to ensure they're not selected
+    high_cost_value: 9999.0
+
+  # Cost function formula
+  # cost = (xrv_weight * -xRV) + (penalty_weight * penalty)
+  # Note: Negative xRV because we're minimizing cost (maximize xRV)
+  formula: "weighted_sum" # Options: 'weighted_sum', 'product', 'ratio'
+
+  # Normalization
+  normalize_xrv: false # Whether to normalize xRV to [0, 1]
+  normalize_penalty: false # Whether to normalize penalty to [0, 1]
+
+  # Logging
+  log_cost_breakdown: true # Log individual cost components
+# ------------------------------------------------------------------------------
+# Monte Carlo Simulation Configuration
+# ------------------------------------------------------------------------------
+# Parameters for multivariate risk simulation using command profiles.
+# Models pitcher control variability and quantifies outcome uncertainty.
+
+MONTE_CARLO:
+  # Simulation parameters
+  num_simulations: 2000 # Number of Monte Carlo trials (statistical significance)
+  seed: 2026 # Random seed for reproducibility
+
+  # Command Profiles (Control/Control Variability)
+  # Each profile defines a bivariate normal distribution for release point noise
+  # sigma_x: Horizontal standard deviation (feet at release)
+  # sigma_z: Vertical standard deviation (feet at release)
+  # rho_xz: Correlation coefficient [-1, 1] (arm angle effect on diagonal scatter)
+  #
+  # Elite: Ace-level command (tight cluster)
+  # Average: League-average command (moderate scatter)
+  # Wild: Poor command (wide scatter)
+  #
+  # UNIT NOTE: Values in METERS (Physics Engine native unit)
+  # Converted from feet: original_ft / 3.28084 = meters
+  command_profiles:
+    elite:
+      sigma_x: 0.0305 # Horizontal std dev (0.10 ft → meters)
+      sigma_z: 0.0366 # Vertical std dev (0.12 ft → meters)
+      rho_xz: 0.3 # Correlation (arm angle diagonal)
+      description: "Ace-level command with tight release point cluster"
+
+    average:
+      sigma_x: 0.0610 # Horizontal std dev (0.20 ft → meters)
+      sigma_z: 0.0762 # Vertical std dev (0.25 ft → meters)
+      rho_xz: 0.4 # Correlation
+      description: "League-average command with moderate scatter"
+
+    wild:
+      sigma_x: 0.1067 # Horizontal std dev (0.35 ft → meters)
+      sigma_z: 0.1219 # Vertical std dev (0.40 ft → meters)
+      rho_xz: 0.5 # Correlation
+      description: "Poor command with wide release variability"
+
+  # Risk Metrics Configuration
+  risk_metrics:
+    # Value at Risk (VaR): Worst-case scenario threshold
+    # 95th percentile = "What's the worst xRV in top 5% of bad outcomes?"
+    var_percentile: 95
+
+    # Barrel threshold for hard contact risk
+    barrel_threshold: 0.5 # xRV threshold for "dangerous contact"
+
+    # Confidence intervals for reporting
+    confidence_intervals: [68, 95, 99.7] # 1σ, 2σ, 3σ
+
+  # Risk Classification Thresholds
+  # Classifies pitches into quadrants based on volatility and mean xRV
+  risk_classification:
+    # Volatility threshold (standard deviation of xRV)
+    high_risk_threshold: 0.15 # Above this = high volatility
+
+    # Stuff quality threshold (mean xRV)
+    good_stuff_threshold: -0.05 # Below this = good stuff (negative xRV better)
+
+    # Label mapping for four quadrants
+    labels:
+      high_risk_good_stuff: "Glass Cannon" # High risk, good stuff (volatile ace)
+      low_risk_good_stuff: "Ace Material" # Low risk, good stuff (elite control)
+      high_risk_bad_stuff: "Meatball" # High risk, bad stuff (batting practice)
+      low_risk_bad_stuff: "Game Manager" # Low risk, bad stuff (consistent but hittable)
+
+    # Label descriptions
+    descriptions:
+      glass_cannon: "High-reward but inconsistent. Elite stuff with command issues."
+      ace_material: "Optimal profile. Elite stuff with elite command."
+      meatball: "Avoid. Inconsistent and hittable when missed."
+      game_manager: "Serviceable. Consistent but lacks elite upside."
+
+  # Visualization parameters
+  visualization:
+    sample_size: 1000 # Number of points to include in visualization data
+    color_map: "RdYlGn_r" # Matplotlib colormap for xRV heatmap (red=bad, green=good)
+    alpha: 0.6 # Transparency for scatter plots
+    marker_size: 20 # Point size in scatter plots
